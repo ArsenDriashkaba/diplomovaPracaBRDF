@@ -46,5 +46,5 @@ and modeling of bidirectional reflectance distribution function
 (brdf) on material surface., 2013.
 
 ## Momentalne vysledky
-![alt text](https://drive.google.com/file/d/1a2nex2Td6J9xz18p8IYgJZomFS4WSigm/view?usp=share_link)
+![alt text](https://github.com/ArsenDriashkaba/diplomovaPracaBRDF/blob/main/img/2.jpg?raw=true)
 
