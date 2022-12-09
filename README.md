@@ -48,3 +48,10 @@ and modeling of bidirectional reflectance distribution function
 ## Momentalne vysledky
 ![alt text](https://github.com/ArsenDriashkaba/diplomovaPracaBRDF/blob/main/img/2.jpeg?raw=true)
 
+![alt text](https://github.com/ArsenDriashkaba/diplomovaPracaBRDF/blob/main/img/3.jpeg?raw=true)
+
+![alt text](https://github.com/ArsenDriashkaba/diplomovaPracaBRDF/blob/main/img/4.jpeg?raw=true)
+
+## Applikacia
+![alt text](https://github.com/ArsenDriashkaba/diplomovaPracaBRDF/blob/main/img/1.jpeg?raw=true)
+
