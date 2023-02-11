@@ -1,9 +1,16 @@
 import numpy as np
-import os
 import tensorflow as tf
 import PIL
+import math
 from PIL import Image
-from matplotlib import cm
+
+def sigmoid(x):
+    return 1 / (1 + math.e ** (-x))
+
+def activate(tensor):
+    s = np.vectorize(sigmoid)
+
+    return s(tensor)
 
 def tensor_to_image(tensor1, isRGB = False, isSpecular=False):
     t = tensor1
@@ -24,20 +31,23 @@ def tensor_to_image(tensor1, isRGB = False, isSpecular=False):
         PIL.Image.fromarray(tensor, 'RGB')
     return PIL.Image.fromarray(tensor)
 
-def otherFunction(tensor):
-    t = tensor
-
-    print(t[0])
-
-    return PIL.Image.fromarray(tensor, 'RGB')
-
-def tensor_to_BRDF(tensor):
-    partialOutputedNormals = tensor[:,:,:,0:2]
-    outputedDiffuse = tensor[:,:,:,2:5]
-    outputedRoughness = tensor[:,:,:,5]
-    outputedSpecular = tensor[:,:,:,6:9]
-
-    return tensor_to_image(outputedDiffuse)
+def gamma_correct(gamma, folder, imgSrc):
+    im = Image.open(f'{folder}/{imgSrc}')
+    gamma1 = gamma
+    row = im.size[0]
+    col = im.size[1]
+    result_img1 = Image.new(mode="RGB", size=(row, col), color=0)
+    for x in range(row):
+        for y in range(col):
+            r = pow(im.getpixel((x, y))[0] / 255, (1 / gamma1)) * 255
+            g = pow(im.getpixel((x, y))[1] / 255, (1 / gamma1)) * 255
+            b = pow(im.getpixel((x, y))[2] / 255, (1 / gamma1)) * 255
+            # add
+            color = (int(r), int(g), int(b))
+            result_img1.putpixel((x, y), color)
+    #show
+    result_img1.save(f'{folder}/corrected-{imgSrc}')
+    result_img1.show()
 
 def get_concat_h(im1, im2):
     dst = Image.new('RGB', (im1.width + im2.width, im1.height))
@@ -56,7 +66,11 @@ output_details = interpreter.get_output_details()
 input_shape = input_details[0]['shape']
 input_data = np.array(np.random.random_sample(input_shape), dtype=np.float32)
 
-image_string = tf.io.read_file('inputExamples/IMG_6966.png')
+imgSrc = 'IMG_20180105_091814.png'
+
+gamma_correct(2, 'inputExamples', imgSrc)
+
+image_string = tf.io.read_file(f'inputExamples/corrected-{imgSrc}')
 raw_input = tf.image.decode_image(image_string)
 raw_input = tf.image.convert_image_dtype(raw_input, dtype=tf.float32)
 
@@ -75,8 +89,6 @@ outputedRGB.save('tflite_images/my7.png')
 
 im = Image.open('tflite_images/my7.png')
 
-# im.show()
-
 
 #_________________________________Specular (9:12)
 outputed1 = output_data[0,:,:,9:12]
@@ -86,8 +98,6 @@ outputedRGB1.save('tflite_images/my8.png')
 
 im1 = Image.open('tflite_images/my8.png')
 
-# im1.show()
-
 #__________________________________Roughness
 outputed2 = output_data[0,:,:,6:9]
 outputedRGB2 = tensor_to_image(outputed2)
@@ -96,7 +106,6 @@ outputedRGB2.save('tflite_images/my9.png')
 
 im2 = Image.open('tflite_images/my9.png')
 
-# im2.show()
 
 #__________________________________Normals
 outputed3 = output_data[0,:,:,0:3]
@@ -106,7 +115,7 @@ outputedRGB2.save('tflite_images/my10.png')
 
 im3 = Image.open('tflite_images/my10.png')
 
-# im3.show()
+
 
 im_final = get_concat_h(get_concat_h(get_concat_h(im, im1), im2), im3)
 
