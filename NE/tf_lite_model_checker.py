@@ -12,6 +12,12 @@ def activate(tensor):
 
     return s(tensor)
 
+def scale_range (input, min, max):
+    input += -(np.min(input))
+    input /= np.max(input) / (max - min)
+    input += min
+    return input
+
 def tensor_to_image(tensor1, isRGB = False, isSpecular=False):
     t = tensor1
     t_min = np.min(t)
@@ -47,13 +53,20 @@ def gamma_correct(gamma, folder, imgSrc):
             result_img1.putpixel((x, y), color)
     #show
     result_img1.save(f'{folder}/corrected-{imgSrc}')
-    result_img1.show()
+    #uncomment to show gamma corrected image
+    # result_img1.show() 
 
 def get_concat_h(im1, im2):
     dst = Image.new('RGB', (im1.width + im2.width, im1.height))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (im1.width, 0))
     return dst
+
+def test(contents):
+    ba = contents.tobytes()
+    filename = "test-.png"
+    image = Image.frombytes('RGB', (256, 256), ba)
+    image.show()
 
 # Load TFLite model and allocate tensors.
 interpreter = tf.lite.Interpreter(model_path="converted_model.tflite")
@@ -66,7 +79,7 @@ output_details = interpreter.get_output_details()
 input_shape = input_details[0]['shape']
 input_data = np.array(np.random.random_sample(input_shape), dtype=np.float32)
 
-imgSrc = 'IMG_20180105_091814.png'
+imgSrc = 'IMG_20180115_144327.png'
 
 gamma_correct(2, 'inputExamples', imgSrc)
 
@@ -86,8 +99,9 @@ outputed = output_data[0,:,:,3:6]
 outputedRGB = tensor_to_image(outputed, True)
 
 outputedRGB.save('tflite_images/my7.png')
+gamma_correct(0.7, 'tflite_images', 'my7.png')
 
-im = Image.open('tflite_images/my7.png')
+im = Image.open('tflite_images/corrected-my7.png')
 
 
 #_________________________________Specular (9:12)
@@ -95,16 +109,18 @@ outputed1 = output_data[0,:,:,9:12]
 outputedRGB1 = tensor_to_image(outputed1, False, True)
 
 outputedRGB1.save('tflite_images/my8.png')
+gamma_correct(0.9, 'tflite_images', 'my8.png')
 
-im1 = Image.open('tflite_images/my8.png')
+im1 = Image.open('tflite_images/corrected-my8.png')
 
 #__________________________________Roughness
 outputed2 = output_data[0,:,:,6:9]
-outputedRGB2 = tensor_to_image(outputed2)
+outputedRGB2 = tensor_to_image(outputed2, True)
 
 outputedRGB2.save('tflite_images/my9.png')
+gamma_correct(1.7, 'tflite_images', 'my9.png')
 
-im2 = Image.open('tflite_images/my9.png')
+im2 = Image.open('tflite_images/corrected-my9.png')
 
 
 #__________________________________Normals
@@ -112,8 +128,9 @@ outputed3 = output_data[0,:,:,0:3]
 outputedRGB2 = tensor_to_image(outputed3, True)
 
 outputedRGB2.save('tflite_images/my10.png')
+gamma_correct(1.1, 'tflite_images', 'my10.png')
 
-im3 = Image.open('tflite_images/my10.png')
+im3 = Image.open('tflite_images/corrected-my10.png')
 
 
 
