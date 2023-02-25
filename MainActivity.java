@@ -5,7 +5,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -15,7 +14,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -25,7 +23,6 @@ import java.util.List;
 
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
-import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.imgproc.Imgproc;
@@ -57,6 +54,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     @Override
+    // Good
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -69,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
         imageView.setImageBitmap(bitmap);
 
         handleLoadTfLite();
-//        handleLoadOpenCV();
+        handleLoadOpenCV();
 
         try {
             int[] outputShape = {1, IMAGE_SIZE, IMAGE_SIZE, 12};
@@ -111,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    // Good
     private MappedByteBuffer loadModelfile() throws IOException {
         AssetFileDescriptor fileDescriptor = this.getAssets().openFd(MODEL_PATH);
         FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
@@ -122,6 +121,7 @@ public class MainActivity extends AppCompatActivity {
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
 
+    // Good
     public void handleLoadTfLite(){
         try {
             tfliteInterpreter = new Interpreter(loadModelfile());
@@ -132,6 +132,66 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Good
+    public List<float[][][]> splitTensorBuffer(TensorBuffer inputBuffer, int width, int height) {
+        /*
+            Return list of 3-dims float array of size 256 x 256 x 3
+            First is NORMAL_MAP
+            Second is DIFFUSE
+            Third is ROUGHNESS
+            Last is SPECULAR
+        */
+
+        float[] outputArray = inputBuffer.getFloatArray();
+
+        // Reshape the output array to a 4D tensor of shape (1, height, width, 12)
+        int[] shape = inputBuffer.getShape();
+        int numChannels = shape[3];
+        int batchSize = shape[0];
+
+        float[][][][] reshapedArray = new float[batchSize][height][width][numChannels];
+
+        for (int b = 0; b < batchSize; b++) {
+            for (int i = 0; i < height; i++) {
+                for (int j = 0; j < width; j++) {
+                    for (int c = 0; c < numChannels; c++) {
+                        reshapedArray[b][i][j][c] = outputArray[b * height * width * numChannels + i * width * numChannels + j * numChannels + c];
+                    }
+                }
+            }
+        }
+
+        // Split the 4D tensor into four 4D tensors, each of shape (1, height, width, 3)
+        float[][][][] bitmap1Array = new float[batchSize][height][width][3];
+        float[][][][] bitmap2Array = new float[batchSize][height][width][3];
+        float[][][][] bitmap3Array = new float[batchSize][height][width][3];
+        float[][][][] bitmap4Array = new float[batchSize][height][width][3];
+
+        // Paste data into bitmapArrays
+        for (int b = 0; b < batchSize; b++) {
+            for (int i = 0; i < height; i++) {
+                for (int j = 0; j < width; j++) {
+                    for (int c = 0; c < 3; c++) {
+                        bitmap1Array[b][i][j][c] = reshapedArray[b][i][j][c];
+                        bitmap2Array[b][i][j][c] = reshapedArray[b][i][j][c + 3];
+                        bitmap3Array[b][i][j][c] = reshapedArray[b][i][j][c + 6];
+                        bitmap4Array[b][i][j][c] = reshapedArray[b][i][j][c + 9];
+                    }
+                }
+            }
+        }
+
+        List<float[][][]> listOfBDRFChannels = new ArrayList<>();
+
+        listOfBDRFChannels.add(bitmap1Array[0]);
+        listOfBDRFChannels.add(bitmap2Array[0]);
+        listOfBDRFChannels.add(bitmap3Array[0]);
+        listOfBDRFChannels.add(bitmap4Array[0]);
+
+        return listOfBDRFChannels;
+    }
+
+    // Testing...
     public static Bitmap tensorBufferToImage(TensorBuffer tensorBuffer, boolean isRGB, boolean isSpecular) {
         float[] tensorArray = tensorBuffer.getFloatArray();
 
@@ -186,108 +246,14 @@ public class MainActivity extends AppCompatActivity {
         return bitmap;
     }
 
-    public static TensorBuffer extractChannelsFromBuffer(TensorBuffer buffer, int numChannels) {
-        int[] originalShape = buffer.getShape();
-        int height = originalShape[1];
-        int width = originalShape[2];
+    // Testing...
+    public Bitmap[] convertTensorBufferChannelsToBitmaps(TensorBuffer tensorBuffer, int width, int height) {
+        List<float[][][]>listOfBDRFChannels = splitTensorBuffer(tensorBuffer, width, height);
 
-        TensorBuffer newBuffer = TensorBuffer.createFixedSize(new int[]{1, height, width, numChannels}, DataType.FLOAT32);
-
-        float[] originalData = buffer.getFloatArray();
-
-        int channelOffset = height * width;
-        for (int c = 0; c < numChannels; c++) {
-            for (int h = 0; h < height; h++) {
-                for (int w = 0; w < width; w++) {
-                    int originalIndex = c * channelOffset + h * width + w;
-                    int newIndex = h * width * numChannels + w * numChannels + c;
-                    newBuffer.getFloatArray()[newIndex] = originalData[originalIndex];
-                }
-            }
-        }
-
-        return newBuffer;
-    }
-
-    public static Bitmap getImage(TensorBuffer outputBuffer){
-        int pixelSize = 3; // number of values per pixel (R, G, B)
-        int imageSize = outputBuffer.getShape()[1]; // assume output shape is [batch_size, image_height, image_width, channels]
-        int numPixels = imageSize * imageSize;
-        float [] floatArray = outputBuffer.getFloatArray();
-        Bitmap outputBitmap = Bitmap.createBitmap(IMAGE_SIZE, IMAGE_SIZE, Bitmap.Config.ARGB_8888);
-
-        for (int i = 0; i < numPixels; i++) {
-            // get the starting index of the current pixel in the output array
-            int pixelStartIndex = i * pixelSize;
-
-            // extract the R, G, and B values for the current pixel
-            float r = floatArray[pixelStartIndex];
-            float g = floatArray[pixelStartIndex + 1];
-            float b = floatArray[pixelStartIndex + 2];
-
-            // convert the float values to 8-bit integers (0-255)
-            int rInt = (int) (r * 255);
-            int gInt = (int) (g * 255);
-            int bInt = (int) (b * 255);
-
-            // set the pixel color in the output bitmap
-            outputBitmap.setPixel(i % imageSize, i / imageSize, Color.rgb(rInt, gInt, bInt));
-        }
-
-        return outputBitmap;
-    }
-
-    public Bitmap[] convertTensorBufferToBitmaps(TensorBuffer tensorBuffer, int width, int height) {
-        float[] outputArray = tensorBuffer.getFloatArray();
-        Log.e(TAG, Arrays.toString(outputArray));
-
-        // Reshape the output array to a 4D tensor of shape (1, height, width, 12)
-        int[] shape = tensorBuffer.getShape();
-        int batchSize = shape[0];
-        int numChannels = shape[3];
-        int[] reshapedShape = {batchSize, height, width, numChannels};
-        float[][][][] reshapedArray = new float[batchSize][height][width][numChannels];
-        for (int b = 0; b < batchSize; b++) {
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    for (int c = 0; c < numChannels; c++) {
-                        reshapedArray[b][i][j][c] = outputArray[b * height * width * numChannels + i * width * numChannels + j * numChannels + c];
-                    }
-                }
-            }
-        }
-
-        // Split the 4D tensor into four 4D tensors, each of shape (1, height, width, 3)
-        float[][][][] bitmap1Array = new float[batchSize][height][width][3];
-        float[][][][] bitmap2Array = new float[batchSize][height][width][3];
-        float[][][][] bitmap3Array = new float[batchSize][height][width][3];
-        float[][][][] bitmap4Array = new float[batchSize][height][width][3];
-
-        for (int b = 0; b < batchSize; b++) {
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    for (int c = 0; c < 3; c++) {
-                        bitmap1Array[b][i][j][c] = reshapedArray[b][i][j][c];
-                        bitmap2Array[b][i][j][c] = reshapedArray[b][i][j][c + 3];
-                        bitmap3Array[b][i][j][c] = reshapedArray[b][i][j][c + 6];
-                        bitmap4Array[b][i][j][c] = reshapedArray[b][i][j][c + 9];
-                    }
-                }
-            }
-        }
+        Log.e(TAG, Arrays.deepToString(listOfBDRFChannels.get(3)));
 
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
-        bitmaps[0] = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        bitmaps[1] = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        bitmaps[2] = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        bitmaps[3] = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        for (int b = 0; b < batchSize; b++) {
-            bitmaps[0].setPixels(convertArrayToColorInt(bitmap1Array[b]), 0, width, 0, 0, width, height);
-            bitmaps[1].setPixels(convertArrayToColorInt(bitmap2Array[b]), 0, width, 0, 0, width, height);
-            bitmaps[2].setPixels(convertArrayToColorInt(bitmap3Array[b]), 0, width, 0, 0, width, height);
-            bitmaps[3].setPixels(convertArrayToColorInt(bitmap4Array[b]), 0, width, 0, 0, width, height);
-        }
 
         return bitmaps;
     }
@@ -312,9 +278,10 @@ public class MainActivity extends AppCompatActivity {
         return intArray;
     }
 
+    // Testing...
     private void saveOutputTensorAsImage3channels(TensorBuffer outputTensor, String fileName, Boolean save) {
-        Bitmap[] bitmaps = convertTensorBufferToBitmaps(outputTensor, IMAGE_SIZE, IMAGE_SIZE);
-        Bitmap diffuse = bitmaps[1];
+        Bitmap[] bitmaps = convertTensorBufferChannelsToBitmaps(outputTensor, IMAGE_SIZE, IMAGE_SIZE);
+        Bitmap diffuse = bitmaps[0];
 
         imageView.setImageBitmap(diffuse);
 
@@ -334,6 +301,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Good
     public void handleLoadOpenCV(){
         try{
             if (OpenCVLoader.initDebug()){
