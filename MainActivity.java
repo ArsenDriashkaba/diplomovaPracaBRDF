@@ -15,6 +15,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
@@ -155,6 +156,7 @@ public class MainActivity extends AppCompatActivity {
             for (int i = 0; i < height; i++) {
                 for (int j = 0; j < width; j++) {
                     for (int c = 0; c < numChannels; c++) {
+                        // Add scaling here if everything will work
                         reshapedArray[b][i][j][c] = outputArray[b * height * width * numChannels + i * width * numChannels + j * numChannels + c];
                     }
                 }
@@ -250,32 +252,88 @@ public class MainActivity extends AppCompatActivity {
     public Bitmap[] convertTensorBufferChannelsToBitmaps(TensorBuffer tensorBuffer, int width, int height) {
         List<float[][][]>listOfBDRFChannels = splitTensorBuffer(tensorBuffer, width, height);
 
-        Log.e(TAG, Arrays.deepToString(listOfBDRFChannels.get(3)));
+        Log.e(TAG, Arrays.deepToString(listOfBDRFChannels.get(1)));
 
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
+        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(3));
+
+        bitmaps[0] = diffuse;
+
         return bitmaps;
     }
 
-    // Helper method to convert a 4D float array to a 1D integer array of colors
-    private int[] convertArrayToColorInt(float[][][] array) {
-        int[] intArray = new int[array.length * array[0].length * array[0][0].length];
-        int index = 0;
+    // Testing...
+    public Bitmap convertFloatArrayToBitmap(float[][][] floatArray) {
+        int rows = floatArray.length;
+        int cols = floatArray[0].length;
+        Mat mat = new Mat(rows, cols, CvType.CV_32FC3);
 
-        for (float[][] floats : array) {
-            for (int j = 0; j < array[0].length; j++) {
-                for (int k = 0; k < array[0][0].length; k++) {
-                    int red = (int) (floats[j][k] * 255);
-                    int green = (int) (floats[j][k] * 255);
-                    int blue = (int) (floats[j][k] * 255);
-                    int alpha = 255;
-                    int color = (alpha << 24) + (red << 16) + (green << 8) + blue;
-                    intArray[index++] = color;
+        float tMin = Float.MAX_VALUE;
+        float tMax = Float.MIN_VALUE;
+
+        // Find the minimum and maximum values in the tensor.
+        for (float[][] value : floatArray) {
+            for (float[] value1: value){
+                for (float v : value1){
+                    if (v < tMin) {
+                        tMin = v;
+                    }
+                    if (v > tMax) {
+                        tMax = v;
+                    }
                 }
             }
         }
-        return intArray;
+
+        Log.e(TAG, "" + tMin);
+        Log.e(TAG, "" + tMax);
+
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                float[] pixelValues = new float[3];
+                pixelValues[0] = floatArray[i][j][0];
+                pixelValues[1] = floatArray[i][j][1];
+                pixelValues[2] = floatArray[i][j][2];
+
+                float[] scaledArray = scaleArrayToRGBValues(pixelValues, false, tMin, tMax);
+
+                mat.put(i, j, scaledArray);
+            }
+        }
+
+        Mat convertedMat = new Mat();
+        mat.convertTo(convertedMat, CvType.CV_8UC3);
+
+        Log.e(TAG, convertedMat.dump());
+
+        Bitmap bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(convertedMat, bitmap);
+
+        return bitmap;
+    }
+
+    // Testing...
+    public float[] scaleArrayToRGBValues(float[] array, boolean isSpecular, float tMin, float tMax) {
+        float[] scaledArray = new float[array.length];
+        float scale = 255.0f;
+
+        if (isSpecular) {
+            // Multiply each value in the tensor by 255.
+            for (int i = 0; i < array.length; i++) {
+                scaledArray[i] = Math.round(array[i] * scale);
+            }
+
+            return scaledArray;
+        }
+
+        // Scale the tensor values to the range [0, 255].
+        for (int i = 0; i < array.length; i++) {
+            scaledArray[i] = Math.round(scale * (array[i] - tMin) / (tMax - tMin));
+        }
+
+        return scaledArray;
     }
 
     // Testing...
