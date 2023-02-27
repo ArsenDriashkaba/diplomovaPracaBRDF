@@ -7,7 +7,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.widget.Button;
-import android.widget.FrameLayout;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -15,7 +14,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
@@ -37,6 +35,7 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import android.util.Log;
 import android.widget.ImageView;
+import android.widget.RelativeLayout;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -45,12 +44,14 @@ public class MainActivity extends AppCompatActivity {
     private static final int IMAGE_SIZE = 256;
     private static final int NUM_CHANNELS = 3;
     private static final String MODEL_PATH = "converted_model.tflite";
-    private static final String IMAGE_PATH = "@drawable/test.png";
+    private static final String IMAGE_PATH = "tree2.png";
 
-    FrameLayout frameLayout;
+    float globalTMin, globalTMax;
+
+    RelativeLayout imagesLayout;
     Interpreter tfliteInterpreter;
     Bitmap bitmap;
-    ImageView imageView;
+    ImageView normalView, diffuseView, roughnessView, specularView;
     Button getResultBtn;
 
 
@@ -59,13 +60,17 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        frameLayout = (FrameLayout)findViewById(R.id.frameLayout);
+        imagesLayout = (RelativeLayout)findViewById(R.id.imagesLayout);
 
         getResultBtn = findViewById(R.id.button2);
-        imageView = findViewById(R.id.photo);
 
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.test);
-        imageView.setImageBitmap(bitmap);
+        normalView = findViewById(R.id.photo);
+        diffuseView = findViewById(R.id.photo1);
+        roughnessView = findViewById(R.id.photo2);
+        specularView = findViewById(R.id.photo3);
+
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.tree2);
+        normalView.setImageBitmap(bitmap);
 
         handleLoadTfLite();
         handleLoadOpenCV();
@@ -252,14 +257,18 @@ public class MainActivity extends AppCompatActivity {
     public Bitmap[] convertTensorBufferChannelsToBitmaps(TensorBuffer tensorBuffer, int width, int height) {
         List<float[][][]>listOfBDRFChannels = splitTensorBuffer(tensorBuffer, width, height);
 
-        Log.e(TAG, Arrays.deepToString(listOfBDRFChannels.get(1)));
-
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
-        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(3));
+        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0));
+        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1));
+        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(2));
+        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(3));
 
-        bitmaps[0] = diffuse;
+        bitmaps[0] = normal;
+        bitmaps[1] = diffuse;
+        bitmaps[2] = roughness;
+        bitmaps[3] = specular;
 
         return bitmaps;
     }
@@ -306,8 +315,6 @@ public class MainActivity extends AppCompatActivity {
         Mat convertedMat = new Mat();
         mat.convertTo(convertedMat, CvType.CV_8UC3);
 
-        Log.e(TAG, convertedMat.dump());
-
         Bitmap bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
         Utils.matToBitmap(convertedMat, bitmap);
 
@@ -341,7 +348,10 @@ public class MainActivity extends AppCompatActivity {
         Bitmap[] bitmaps = convertTensorBufferChannelsToBitmaps(outputTensor, IMAGE_SIZE, IMAGE_SIZE);
         Bitmap diffuse = bitmaps[0];
 
-        imageView.setImageBitmap(diffuse);
+        normalView.setImageBitmap(bitmaps[0]);
+        diffuseView.setImageBitmap(bitmaps[1]);
+        roughnessView.setImageBitmap(bitmaps[2]);
+        specularView.setImageBitmap(bitmaps[3]);
 
         Bitmap outputBitmap = diffuse;
 
@@ -367,6 +377,20 @@ public class MainActivity extends AppCompatActivity {
             }
         }catch (Exception ex){
             Log.e(TAG, ex.toString());
+        }
+    }
+
+    public void findGlobalExtremas(float[] array){
+        globalTMin = Float.MAX_VALUE;
+        globalTMax = Float.MIN_VALUE;
+
+        for (float v : array){
+            if (v < globalTMin) {
+                globalTMin = v;
+            }
+            if (v > globalTMax) {
+                globalTMax = v;
+            }
         }
     }
 }
