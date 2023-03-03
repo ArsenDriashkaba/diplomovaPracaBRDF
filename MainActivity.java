@@ -177,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Good
+    // Testing...
     public List<float[][][]> splitTensorBuffer(TensorBuffer inputBuffer, int width, int height) {
         /*
             Return list of 3-dims float array of size 256 x 256 x 3
@@ -350,7 +350,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Testing...
+    // Good
     public static Bitmap cropBitmapToSquare(Bitmap bitmap) {
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
@@ -388,6 +388,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Good
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == CAMERA_REQUEST_CODE){
@@ -401,14 +402,19 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
+    // Good
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         try {
             if (requestCode == IMAGE_CAPTURED_CODE && data != null){
                 photoBitmap = (Bitmap) data.getExtras().get("data");
 
-                // Testing processing some texture:
-                processImage(photoBitmap);
+                new Thread(new Runnable() {
+                    public void run(){
+                        // Testing processing some texture:
+                        processImage(photoBitmap);
+                    }
+                }).start();
 
                 actualPhoto.setImageBitmap(photoBitmap);
 
@@ -419,7 +425,12 @@ public class MainActivity extends AppCompatActivity {
                 Uri uri = data.getData();
                 photoBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
 
-                processImage(photoBitmap);
+                new Thread(new Runnable() {
+                    public void run(){
+                        processImage(photoBitmap);
+                    }
+                }).start();
+
                 actualPhoto.setImageBitmap(photoBitmap);
 
                 return;
