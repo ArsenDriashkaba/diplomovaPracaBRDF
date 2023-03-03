@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -51,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "Main Activity ------->";
     private static final int CAMERA_REQUEST_CODE = 1111;
     private static final int IMAGE_CAPTURED_CODE = 1112;
+    private static final int IMAGE_SELECT_CODE = 1113;
 
     private static final int IMAGE_SIZE = 256;
     private static final int NUM_CHANNELS = 3;
@@ -61,7 +63,7 @@ public class MainActivity extends AppCompatActivity {
     Interpreter tfliteInterpreter;
     Bitmap bitmap, photoBitmap;
     ImageView normalView, diffuseView, roughnessView, specularView, actualPhoto;
-    Button getResultBtn, captureBtn;
+    Button getResultBtn, captureBtn, galleryBtn;
 
 
     @Override
@@ -73,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
 
         getResultBtn = findViewById(R.id.button2);
         captureBtn = findViewById(R.id.button);
+        galleryBtn = findViewById(R.id.gallery);
 
         normalView = findViewById(R.id.photo);
         diffuseView = findViewById(R.id.photo1);
@@ -94,6 +97,16 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 startActivityForResult(intent, IMAGE_CAPTURED_CODE);
+            }
+        });
+
+        galleryBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent();
+                intent.setAction(Intent.ACTION_GET_CONTENT);
+                intent.setType("images/*");
+                startActivityForResult(intent, IMAGE_SELECT_CODE);
             }
         });
 
@@ -398,6 +411,18 @@ public class MainActivity extends AppCompatActivity {
                 processImage(photoBitmap);
 
                 actualPhoto.setImageBitmap(photoBitmap);
+
+                return;
+            }
+
+            if (requestCode == IMAGE_SELECT_CODE && data != null){
+                Uri uri = data.getData();
+                photoBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
+
+                processImage(photoBitmap);
+                actualPhoto.setImageBitmap(photoBitmap);
+
+                return;
             }
         }catch (Exception ex){
             ex.printStackTrace();
