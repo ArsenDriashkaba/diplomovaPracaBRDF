@@ -1,11 +1,20 @@
 package com.example.cameratestaplication;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
+import android.Manifest;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
+import android.view.View;
 import android.widget.Button;
 
 import java.io.File;
@@ -40,19 +49,19 @@ import android.widget.RelativeLayout;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "Main Activity ------->";
+    private static final int CAMERA_REQUEST_CODE = 1111;
+    private static final int IMAGE_CAPTURED_CODE = 1112;
 
     private static final int IMAGE_SIZE = 256;
     private static final int NUM_CHANNELS = 3;
     private static final String MODEL_PATH = "converted_model.tflite";
     private static final String IMAGE_PATH = "tree2.png";
 
-    float globalTMin, globalTMax;
-
     RelativeLayout imagesLayout;
     Interpreter tfliteInterpreter;
-    Bitmap bitmap;
-    ImageView normalView, diffuseView, roughnessView, specularView;
-    Button getResultBtn;
+    Bitmap bitmap, photoBitmap;
+    ImageView normalView, diffuseView, roughnessView, specularView, actualPhoto;
+    Button getResultBtn, captureBtn;
 
 
     @Override
@@ -63,21 +72,39 @@ public class MainActivity extends AppCompatActivity {
         imagesLayout = (RelativeLayout)findViewById(R.id.imagesLayout);
 
         getResultBtn = findViewById(R.id.button2);
+        captureBtn = findViewById(R.id.button);
 
         normalView = findViewById(R.id.photo);
         diffuseView = findViewById(R.id.photo1);
         roughnessView = findViewById(R.id.photo2);
         specularView = findViewById(R.id.photo3);
+        actualPhoto = findViewById(R.id.photo4);
 
         bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.tree2);
-        normalView.setImageBitmap(bitmap);
 
         handleLoadTfLite();
         handleLoadOpenCV();
+        getPermission();
 
+        // Pass bitmap to process image and display it on screen
+        processImage(bitmap);
+
+        captureBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                startActivityForResult(intent, IMAGE_CAPTURED_CODE);
+            }
+        });
+
+    }
+
+    // Good
+    public void processImage(Bitmap bitmap){
         try {
             int[] outputShape = {1, IMAGE_SIZE, IMAGE_SIZE, 12};
 
+            bitmap = cropBitmapToSquare(bitmap);
             bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, true);
 
             ImageProcessor imageProcessor =
@@ -100,7 +127,7 @@ public class MainActivity extends AppCompatActivity {
             byteBuffer.rewind();
             byteBuffer.put(tensorImage.getBuffer());
 
-            Log.e(TAG, Arrays.toString(tensorBuffer.getFloatArray()));
+//            Log.e(TAG, Arrays.toString(tensorBuffer.getFloatArray()));
 
             TensorBuffer outputBuffer = TensorBuffer.createFixedSize(outputShape, DataType.FLOAT32);
             ByteBuffer outputData = outputBuffer.getBuffer();
@@ -112,7 +139,6 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception ex){
             ex.printStackTrace();
         }
-
     }
 
     // Good
@@ -198,62 +224,7 @@ public class MainActivity extends AppCompatActivity {
         return listOfBDRFChannels;
     }
 
-    // Testing...
-    public static Bitmap tensorBufferToImage(TensorBuffer tensorBuffer, boolean isRGB, boolean isSpecular) {
-        float[] tensorArray = tensorBuffer.getFloatArray();
-
-        float tensorMin = Float.MAX_VALUE;
-        float tensorMax = Float.MIN_VALUE;
-
-        // Find the minimum and maximum values in the tensor.
-        for (float value : tensorArray) {
-            if (value < tensorMin) {
-                tensorMin = value;
-            }
-            if (value > tensorMax) {
-                tensorMax = value;
-            }
-        }
-
-        Bitmap bitmap;
-        if (isSpecular) {
-            // Multiply each value in the tensor by 255.
-            for (int i = 0; i < tensorArray.length; i++) {
-                tensorArray[i] *= 255f;
-            }
-            bitmap = Bitmap.createBitmap(tensorBuffer.getShape()[1], tensorBuffer.getShape()[0], Bitmap.Config.ALPHA_8);
-        } else {
-            // Scale the tensor values to the range [0, 255].
-            for (int i = 0; i < tensorArray.length; i++) {
-                tensorArray[i] = 255f * (tensorArray[i] - tensorMin) / (tensorMax - tensorMin);
-            }
-            bitmap = Bitmap.createBitmap(tensorBuffer.getShape()[1], tensorBuffer.getShape()[0], Bitmap.Config.ARGB_8888);
-        }
-
-        // Convert the float array to a byte array.
-        byte[] byteArray = new byte[tensorArray.length * 4];
-        ByteBuffer byteBuffer = ByteBuffer.wrap(byteArray);
-        FloatBuffer floatBuffer = byteBuffer.asFloatBuffer();
-        floatBuffer.put(tensorArray);
-
-        if (isRGB) {
-            // Convert the tensor to an RGB image.
-            Mat mat = new Mat(tensorBuffer.getShape()[0], tensorBuffer.getShape()[1], CvType.CV_32FC3);
-            mat.put(0, 0, byteBuffer.array());
-            Mat rgbMat = new Mat();
-            Imgproc.cvtColor(mat, rgbMat, Imgproc.COLOR_BGR2RGB);
-            Utils.matToBitmap(rgbMat, bitmap);
-        } else {
-            // Convert the tensor to a grayscale image.
-            Mat mat = new Mat(tensorBuffer.getShape()[0], tensorBuffer.getShape()[1], CvType.CV_32FC1);
-            mat.put(0, 0, byteBuffer.array());
-            Utils.matToBitmap(mat, bitmap);
-        }
-
-        return bitmap;
-    }
-
-    // Testing...
+    // Good
     public Bitmap[] convertTensorBufferChannelsToBitmaps(TensorBuffer tensorBuffer, int width, int height) {
         List<float[][][]>listOfBDRFChannels = splitTensorBuffer(tensorBuffer, width, height);
 
@@ -296,9 +267,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        Log.e(TAG, "" + tMin);
-        Log.e(TAG, "" + tMax);
-
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
                 float[] pixelValues = new float[3];
@@ -321,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
         return bitmap;
     }
 
-    // Testing...
+    // Good
     public float[] scaleArrayToRGBValues(float[] array, boolean isSpecular, float tMin, float tMax) {
         float[] scaledArray = new float[array.length];
         float scale = 255.0f;
@@ -369,6 +337,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Testing...
+    public static Bitmap cropBitmapToSquare(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+
+        if (width == height){
+            return bitmap;
+        }
+
+        if (height > width) {
+            return Bitmap.createBitmap(bitmap, 0, height / 2 - width / 2,
+                    width, width);
+        }
+
+        return Bitmap.createBitmap(bitmap, width / 2 - height / 2, 0,
+                    height, height);
+    }
+
     // Good
     public void handleLoadOpenCV(){
         try{
@@ -380,17 +366,43 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void findGlobalExtremas(float[] array){
-        globalTMin = Float.MAX_VALUE;
-        globalTMax = Float.MIN_VALUE;
-
-        for (float v : array){
-            if (v < globalTMin) {
-                globalTMin = v;
-            }
-            if (v > globalTMax) {
-                globalTMax = v;
+    // Good
+    void getPermission(){
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
             }
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == CAMERA_REQUEST_CODE){
+            if (grantResults.length > 0){
+                if (grantResults[0] != PackageManager.PERMISSION_GRANTED){
+                    this.getPermission();
+                }
+            }
+        }
+
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        try {
+            if (requestCode == IMAGE_CAPTURED_CODE && data != null){
+                photoBitmap = (Bitmap) data.getExtras().get("data");
+
+                // Testing processing some texture:
+                processImage(photoBitmap);
+
+                actualPhoto.setImageBitmap(photoBitmap);
+            }
+        }catch (Exception ex){
+            ex.printStackTrace();
+        }
+
+        super.onActivityResult(requestCode, resultCode, data);
     }
 }
