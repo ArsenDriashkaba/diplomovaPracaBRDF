@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
@@ -23,11 +24,9 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.opencv.android.OpenCVLoader;
@@ -35,7 +34,6 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
-import org.opencv.imgproc.Imgproc;
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.support.common.ops.NormalizeOp;
@@ -46,6 +44,7 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
 import android.util.Log;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 
 public class MainActivity extends AppCompatActivity {
@@ -60,12 +59,13 @@ public class MainActivity extends AppCompatActivity {
     private static final String MODEL_PATH = "converted_model.tflite";
     private static final String IMAGE_PATH = "tree1.png";
 
-    RelativeLayout imagesLayout;
-    Interpreter tfliteInterpreter;
-    Bitmap bitmap, photoBitmap;
-    ImageView normalView, diffuseView, roughnessView, specularView, actualPhoto;
-    Button getResultBtn, captureBtn, galleryBtn;
+    private static RelativeLayout.LayoutParams params = null;
 
+    RelativeLayout imagesLayout, progressLayout;
+    Interpreter tfliteInterpreter;
+    Bitmap bitmap, photoBitmap, placeholder;
+    ImageView normalView, diffuseView, roughnessView, specularView, actualPhoto;
+    Button captureBtn, galleryBtn;
 
     @Override
     // Good
@@ -73,8 +73,12 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         imagesLayout = (RelativeLayout)findViewById(R.id.imagesLayout);
+        progressLayout = (RelativeLayout)findViewById(R.id.progressLayout);
+        params = (RelativeLayout.LayoutParams)progressLayout.getLayoutParams();
 
-        getResultBtn = findViewById(R.id.button2);
+        ProgressBar progressBar = findViewById(R.id.progress_bar);
+        progressBar.setMax(100);
+
         captureBtn = findViewById(R.id.button);
         galleryBtn = findViewById(R.id.gallery);
 
@@ -85,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         actualPhoto = findViewById(R.id.photo4);
 
         bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.test);
+        placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
         handleLoadOpenCV();
@@ -252,6 +257,11 @@ public class MainActivity extends AppCompatActivity {
         Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.7f);
         Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f);
         Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.6f);
+
+        normal = Bitmap.createScaledBitmap(normal, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
+        diffuse = Bitmap.createScaledBitmap(diffuse, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
+        roughness = Bitmap.createScaledBitmap(roughness, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
+        specular = Bitmap.createScaledBitmap(specular, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
 
         bitmaps[0] = normal;
         bitmaps[1] = diffuse;
@@ -423,12 +433,52 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Good
-    void getPermission(){
+    public void getPermission(){
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
             }
         }
+    }
+
+    // Testing...
+    public void resetImageViews(){
+        normalView.setImageBitmap(placeholder);
+        diffuseView.setImageBitmap(placeholder);
+        specularView.setImageBitmap(placeholder);
+        roughnessView.setImageBitmap(placeholder);
+    }
+
+    // Good
+    public int dpToPx(int dp) {
+        Context context = this.getBaseContext();
+        float density = context.getResources()
+                .getDisplayMetrics()
+                .density;
+        return Math.round((float) dp * density);
+    }
+
+    // Good
+    public void handleOnActivityResult(){
+        params.height = dpToPx(484);
+        progressLayout.setLayoutParams(params);
+
+        new Thread(new Runnable() {
+            public void run(){
+                processImage(photoBitmap);
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        params.height = dpToPx(0);
+                        progressLayout.setLayoutParams(params);
+                    }
+                });
+            }
+        }).start();
+
+        photoBitmap = cropBitmapToSquare(photoBitmap);
+        actualPhoto.setImageBitmap(photoBitmap);
     }
 
     // Good
@@ -452,15 +502,7 @@ public class MainActivity extends AppCompatActivity {
             if (requestCode == IMAGE_CAPTURED_CODE && data != null){
                 photoBitmap = (Bitmap) data.getExtras().get("data");
 
-                new Thread(new Runnable() {
-                    public void run(){
-                        // Testing processing some texture:
-                        processImage(photoBitmap);
-                    }
-                }).start();
-
-                photoBitmap = Bitmap.createScaledBitmap(photoBitmap, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
-                actualPhoto.setImageBitmap(photoBitmap);
+                handleOnActivityResult();
 
                 return;
             }
@@ -469,14 +511,7 @@ public class MainActivity extends AppCompatActivity {
                 Uri uri = data.getData();
                 photoBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
 
-                new Thread(new Runnable() {
-                    public void run(){
-                        processImage(photoBitmap);
-                    }
-                }).start();
-
-                photoBitmap = Bitmap.createScaledBitmap(photoBitmap, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
-                actualPhoto.setImageBitmap(photoBitmap);
+                handleOnActivityResult();
 
                 return;
             }
