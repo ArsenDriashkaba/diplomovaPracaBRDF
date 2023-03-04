@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
         specularView = findViewById(R.id.photo3);
         actualPhoto = findViewById(R.id.photo4);
 
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.tree2);
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.test);
 
         handleLoadTfLite();
         handleLoadOpenCV();
@@ -121,8 +121,8 @@ public class MainActivity extends AppCompatActivity {
             bitmap = cropBitmapToSquare(bitmap);
 
             // Testing...
-            bitmap = gammaCorrectBitmap(bitmap, 2f);
-            bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, true);
+            bitmap = gammaCorrectBitmap(bitmap, 2.2f);
+            bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, false);
 
             ImageProcessor imageProcessor =
                     new ImageProcessor.Builder()
@@ -248,10 +248,10 @@ public class MainActivity extends AppCompatActivity {
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
-        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1);
-        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.55f);
-        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.5f);
-        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.5f);
+        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1f);
+        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.7f);
+        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f);
+        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.6f);
 
         bitmaps[0] = normal;
         bitmaps[1] = diffuse;
@@ -301,7 +301,6 @@ public class MainActivity extends AppCompatActivity {
         mat.convertTo(convertedMat, CvType.CV_8UC3);
 
         if (gamma != 1){
-            // Testing...
             convertedMat = gammaCorrection(convertedMat, gamma);
         }
 
@@ -460,6 +459,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }).start();
 
+                photoBitmap = Bitmap.createScaledBitmap(photoBitmap, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
                 actualPhoto.setImageBitmap(photoBitmap);
 
                 return;
@@ -475,6 +475,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }).start();
 
+                photoBitmap = Bitmap.createScaledBitmap(photoBitmap, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
                 actualPhoto.setImageBitmap(photoBitmap);
 
                 return;
