@@ -32,6 +32,7 @@ import java.util.List;
 
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.imgproc.Imgproc;
@@ -57,7 +58,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int IMAGE_SIZE = 256;
     private static final int NUM_CHANNELS = 3;
     private static final String MODEL_PATH = "converted_model.tflite";
-    private static final String IMAGE_PATH = "tree2.png";
+    private static final String IMAGE_PATH = "tree1.png";
 
     RelativeLayout imagesLayout;
     Interpreter tfliteInterpreter;
@@ -118,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
             int[] outputShape = {1, IMAGE_SIZE, IMAGE_SIZE, 12};
 
             bitmap = cropBitmapToSquare(bitmap);
+
+            // Testing...
+            bitmap = gammaCorrectBitmap(bitmap, 2f);
             bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, true);
 
             ImageProcessor imageProcessor =
@@ -244,10 +248,10 @@ public class MainActivity extends AppCompatActivity {
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
-        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0));
-        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1));
-        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(2));
-        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(3));
+        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1);
+        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.55f);
+        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.5f);
+        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.5f);
 
         bitmaps[0] = normal;
         bitmaps[1] = diffuse;
@@ -258,7 +262,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Testing...
-    public Bitmap convertFloatArrayToBitmap(float[][][] floatArray) {
+    public Bitmap convertFloatArrayToBitmap(float[][][] floatArray, float gamma) {
         int rows = floatArray.length;
         int cols = floatArray[0].length;
         Mat mat = new Mat(rows, cols, CvType.CV_32FC3);
@@ -295,6 +299,11 @@ public class MainActivity extends AppCompatActivity {
 
         Mat convertedMat = new Mat();
         mat.convertTo(convertedMat, CvType.CV_8UC3);
+
+        if (gamma != 1){
+            // Testing...
+            convertedMat = gammaCorrection(convertedMat, gamma);
+        }
 
         Bitmap bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
         Utils.matToBitmap(convertedMat, bitmap);
@@ -366,6 +375,41 @@ public class MainActivity extends AppCompatActivity {
 
         return Bitmap.createBitmap(bitmap, width / 2 - height / 2, 0,
                     height, height);
+    }
+
+    // Good
+    public static Mat gammaCorrection(Mat src, float gamma) {
+        float invGamma = 1 / gamma;
+
+        Mat table = new Mat(1, 256, CvType.CV_8U);
+        Mat gammaCorrected = new Mat();
+
+        for (int i = 0; i < 256; ++i) {
+            table.put(0, i, (int) (Math.pow(i / 255.0f, invGamma) * 255));
+        }
+
+        Core.LUT(src, table, gammaCorrected);
+
+        return gammaCorrected;
+    }
+
+    // Good
+    public static Bitmap gammaCorrectBitmap(Bitmap src, float gamma) {
+        // Convert bitmap to Mat object
+        Mat matImage = new Mat();
+        Utils.bitmapToMat(src, matImage);
+
+        // Apply gamma correction
+        matImage = gammaCorrection(matImage, gamma);
+
+        // Convert back to bitmap
+        Mat convertedMat = new Mat();
+        matImage.convertTo(convertedMat, CvType.CV_8UC3);
+
+        Bitmap bitmap = Bitmap.createBitmap(convertedMat.rows(), convertedMat.cols(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(convertedMat, bitmap);
+
+        return bitmap;
     }
 
     // Good
