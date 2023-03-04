@@ -111,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 Intent intent = new Intent();
                 intent.setAction(Intent.ACTION_GET_CONTENT);
-                intent.setType("images/*");
+                intent.setType("image/*");
                 startActivityForResult(intent, IMAGE_SELECT_CODE);
             }
         });
