@@ -34,6 +34,7 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.imgproc.Imgproc;
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.support.common.ops.NormalizeOp;
@@ -88,7 +89,8 @@ public class MainActivity extends AppCompatActivity {
         specularView = findViewById(R.id.photo3);
         actualPhoto = findViewById(R.id.photo4);
 
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.test);
+        // Default image processing
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stone);
         placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
@@ -124,9 +126,9 @@ public class MainActivity extends AppCompatActivity {
             int[] outputShape = {1, IMAGE_SIZE, IMAGE_SIZE, 12};
 
             bitmap = cropBitmapToSquare(bitmap);
+            actualPhoto.setImageBitmap(bitmap);
 
-            // Testing...
-            bitmap = gammaCorrectBitmap(bitmap, 2.2f);
+            bitmap = gammaCorrectBitmap(bitmap, 2f);
             bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, false);
 
             ImageProcessor imageProcessor =
@@ -253,10 +255,10 @@ public class MainActivity extends AppCompatActivity {
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
-        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1f);
-        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.7f);
-        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f);
-        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.6f);
+        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1f, false);
+        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.7f, false);
+        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f, true);
+        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.4f, true);
 
         normal = Bitmap.createScaledBitmap(normal, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
         diffuse = Bitmap.createScaledBitmap(diffuse, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
@@ -272,7 +274,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Testing...
-    public Bitmap convertFloatArrayToBitmap(float[][][] floatArray, float gamma) {
+    public Bitmap convertFloatArrayToBitmap(float[][][] floatArray, float gamma, boolean isGray) {
         int rows = floatArray.length;
         int cols = floatArray[0].length;
         Mat mat = new Mat(rows, cols, CvType.CV_32FC3);
@@ -309,6 +311,12 @@ public class MainActivity extends AppCompatActivity {
 
         Mat convertedMat = new Mat();
         mat.convertTo(convertedMat, CvType.CV_8UC3);
+
+        if (isGray){
+            Mat grayImage = new Mat();
+            Imgproc.cvtColor(convertedMat, grayImage, Imgproc.COLOR_BGR2GRAY);
+            convertedMat = grayImage;
+        }
 
         if (gamma != 1){
             convertedMat = gammaCorrection(convertedMat, gamma);
