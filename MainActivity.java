@@ -90,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
         actualPhoto = findViewById(R.id.photo4);
 
         // Default image processing
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stone);
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.leather);
         placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
@@ -128,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
             bitmap = cropBitmapToSquare(bitmap);
             actualPhoto.setImageBitmap(bitmap);
 
-            bitmap = gammaCorrectBitmap(bitmap, 2f);
+            bitmap = gammaCorrectBitmap(bitmap, 1.5f);
             bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, false);
 
             ImageProcessor imageProcessor =
@@ -257,8 +257,8 @@ public class MainActivity extends AppCompatActivity {
 
         Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1f, false);
         Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.7f, false);
-        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f, true);
-        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.4f, true);
+        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f, false);
+        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.4f, false);
 
         normal = Bitmap.createScaledBitmap(normal, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
         diffuse = Bitmap.createScaledBitmap(diffuse, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
