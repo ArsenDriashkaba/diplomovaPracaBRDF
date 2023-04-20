@@ -6,6 +6,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -17,17 +19,20 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
@@ -61,12 +66,13 @@ public class MainActivity extends AppCompatActivity {
     private static final String IMAGE_PATH = "tree1.png";
 
     private static RelativeLayout.LayoutParams params = null;
+    private static ViewGroup.LayoutParams saveBtnParams = null;
 
     RelativeLayout imagesLayout, progressLayout;
     Interpreter tfliteInterpreter;
-    Bitmap bitmap, photoBitmap, placeholder;
+    Bitmap bitmap, photoBitmap, placeholder, normalBitmap, diffuseBitmap, roughnessBitmap, specularBitmap;
     ImageView normalView, diffuseView, roughnessView, specularView, actualPhoto;
-    Button captureBtn, galleryBtn;
+    Button captureBtn, galleryBtn, saveBtn;
 
     @Override
     // Good
@@ -83,14 +89,21 @@ public class MainActivity extends AppCompatActivity {
         captureBtn = findViewById(R.id.button);
         galleryBtn = findViewById(R.id.gallery);
 
+        // Save button layout rendering
+        saveBtn = findViewById(R.id.save);
+        saveBtnParams = saveBtn.getLayoutParams();
+        saveBtnParams.width = dpToPx(0);
+        saveBtn.setLayoutParams(saveBtnParams);
+
         normalView = findViewById(R.id.photo);
         diffuseView = findViewById(R.id.photo1);
         roughnessView = findViewById(R.id.photo2);
         specularView = findViewById(R.id.photo3);
         actualPhoto = findViewById(R.id.photo4);
 
+
         // Default image processing
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.leather);
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img47);
         placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
@@ -98,7 +111,11 @@ public class MainActivity extends AppCompatActivity {
         getPermission();
 
         // Pass bitmap to process image and display it on screen
-        processImage(bitmap);
+        try {
+            processImage(bitmap);
+        }catch (Exception ex){
+            ex.printStackTrace();
+        }
 
         captureBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -118,17 +135,30 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        saveBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                saveBitmapToImage(normalBitmap, "NormalMap");
+                saveBitmapToImage(diffuseBitmap, "DiffuseMap");
+                saveBitmapToImage(roughnessBitmap, "RoughnessMap");
+                saveBitmapToImage(specularBitmap, "SpecularMap");
+            }
+        });
+
     }
 
-    // Good
+    // Good 1
     public void processImage(Bitmap bitmap){
         try {
+            saveBtnParams.width = dpToPx(0);
+            saveBtn.setLayoutParams(saveBtnParams);
+
             int[] outputShape = {1, IMAGE_SIZE, IMAGE_SIZE, 12};
 
             bitmap = cropBitmapToSquare(bitmap);
             actualPhoto.setImageBitmap(bitmap);
 
-            bitmap = gammaCorrectBitmap(bitmap, 1.5f);
+            bitmap = gammaCorrectBitmap(bitmap, 1.3f);
             bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, false);
 
             ImageProcessor imageProcessor =
@@ -248,17 +278,17 @@ public class MainActivity extends AppCompatActivity {
         return listOfBDRFChannels;
     }
 
-    // Good
+    // Good 3
     public Bitmap[] convertTensorBufferChannelsToBitmaps(TensorBuffer tensorBuffer, int width, int height) {
         List<float[][][]>listOfBDRFChannels = splitTensorBuffer(tensorBuffer, width, height);
 
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
-        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1f, false);
-        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 0.7f, false);
-        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.4f, false);
-        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1.4f, false);
+        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1.2f, false);
+        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1f, false);
+        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.2f, false);
+        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1f, false);
 
         normal = Bitmap.createScaledBitmap(normal, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
         diffuse = Bitmap.createScaledBitmap(diffuse, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
@@ -270,10 +300,15 @@ public class MainActivity extends AppCompatActivity {
         bitmaps[2] = roughness;
         bitmaps[3] = specular;
 
+//        bitmaps[0] = gammaCorrectBitmap(normal, 0.9f);
+//        bitmaps[1] = gammaCorrectBitmap(diffuse, 0.9f);
+//        bitmaps[2] = gammaCorrectBitmap(roughness, 0.9f);
+//        bitmaps[3] = gammaCorrectBitmap(specular, 0.9f);
+
         return bitmaps;
     }
 
-    // Testing...
+    // Testing... 4
     public Bitmap convertFloatArrayToBitmap(float[][][] floatArray, float gamma, boolean isGray) {
         int rows = floatArray.length;
         int cols = floatArray[0].length;
@@ -350,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
         return scaledArray;
     }
 
-    // Testing...
+    // Testing... 2
     private void saveOutputTensorAsImage3channels(TensorBuffer outputTensor, String fileName, Boolean save) {
         Bitmap[] bitmaps = convertTensorBufferChannelsToBitmaps(outputTensor, IMAGE_SIZE, IMAGE_SIZE);
         Bitmap diffuse = bitmaps[0];
@@ -359,6 +394,11 @@ public class MainActivity extends AppCompatActivity {
         diffuseView.setImageBitmap(bitmaps[1]);
         roughnessView.setImageBitmap(bitmaps[2]);
         specularView.setImageBitmap(bitmaps[3]);
+
+        normalBitmap = bitmaps[0];
+        diffuseBitmap = bitmaps[1];
+        roughnessBitmap = bitmaps[2];
+        specularBitmap = bitmaps[3];
 
         Bitmap outputBitmap = diffuse;
 
@@ -457,6 +497,28 @@ public class MainActivity extends AppCompatActivity {
         roughnessView.setImageBitmap(placeholder);
     }
 
+    // Testing...
+    public void saveBitmapToImage(Bitmap bitmap, String filename){
+        OutputStream fos;
+
+        try (FileOutputStream out = new FileOutputStream(filename)) {
+//            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); // bmp is your Bitmap instance
+//            // PNG is a lossless format, the compression factor (100) is ignored
+
+            ContentResolver resolver = getContentResolver();
+            ContentValues contentValues = new ContentValues();
+            contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, "Image" + ".png");
+            contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
+
+            Uri imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues);
+            fos = resolver.openOutputStream(Objects.requireNonNull(imageUri));
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
+            Objects.requireNonNull(fos);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     // Good
     public int dpToPx(int dp) {
         Context context = this.getBaseContext();
@@ -478,6 +540,9 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        saveBtnParams.width = dpToPx(102);
+                        saveBtn.setLayoutParams(saveBtnParams);
+
                         params.height = dpToPx(0);
                         progressLayout.setLayoutParams(params);
                     }
