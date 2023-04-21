@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         // Default image processing
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stone); // <--------------- Here
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img49); // <--------------- Here
         placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
@@ -299,26 +299,17 @@ public class MainActivity extends AppCompatActivity {
 
         // TODO: Find best values for inverseGamma correction for LOW_CONTRAST_IMAGES
         if (lowContrastImage){
-            if (globalMean >= 0.5){
-                specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), inverseGamma/2, false);
-                diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), inverseGamma/2, false);
-
-                specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1/inverseGamma, false);
-                diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1, false);
-            }
-            else{
-                specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1/inverseGamma, false);
-                diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1/inverseGamma, false);
-            }
+            specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), inverseGamma/2, false);
+            diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), inverseGamma/2, false);
+            roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), inverseGamma/2, false); //1.2f
         }
         else{
             inverseGamma *= 1.2f;
             diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1/inverseGamma, false);
             specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), inverseGamma, false);
+            roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), inverseGamma, false); //1.2f
         }
         normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1, false);
-        roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), inverseGamma, false); //1.2f
-
 
 
         normal = Bitmap.createScaledBitmap(normal, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
