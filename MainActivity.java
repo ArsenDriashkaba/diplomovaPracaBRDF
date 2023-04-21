@@ -39,6 +39,7 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfDouble;
 import org.opencv.imgproc.Imgproc;
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
@@ -67,6 +68,11 @@ public class MainActivity extends AppCompatActivity {
 
     private static RelativeLayout.LayoutParams params = null;
     private static ViewGroup.LayoutParams saveBtnParams = null;
+
+    private static double globalGamma = 1;
+    private static double globalMean = 0.5;
+    private static double globalStandartDeviation = 0.5;
+    private static boolean lowContrastImage;
 
     RelativeLayout imagesLayout, progressLayout;
     Interpreter tfliteInterpreter;
@@ -103,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         // Default image processing
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img47);
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.stone); // <--------------- Here
         placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
@@ -158,7 +164,7 @@ public class MainActivity extends AppCompatActivity {
             bitmap = cropBitmapToSquare(bitmap);
             actualPhoto.setImageBitmap(bitmap);
 
-            bitmap = gammaCorrectBitmap(bitmap, 1.3f);
+            bitmap = adaptiveGammaCorrection(bitmap);
             bitmap = Bitmap.createScaledBitmap(bitmap, IMAGE_SIZE, IMAGE_SIZE, false);
 
             ImageProcessor imageProcessor =
@@ -180,8 +186,6 @@ public class MainActivity extends AppCompatActivity {
             tensorImage.getBuffer().rewind();
             byteBuffer.rewind();
             byteBuffer.put(tensorImage.getBuffer());
-
-//            Log.e(TAG, Arrays.toString(tensorBuffer.getFloatArray()));
 
             TensorBuffer outputBuffer = TensorBuffer.createFixedSize(outputShape, DataType.FLOAT32);
             ByteBuffer outputData = outputBuffer.getBuffer();
@@ -285,10 +289,37 @@ public class MainActivity extends AppCompatActivity {
         // Convert each 4D tensor to a bitmap
         Bitmap[] bitmaps = new Bitmap[4];
 
-        Bitmap normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1.2f, false);
-        Bitmap diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1f, false);
-        Bitmap roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), 1.2f, false);
-        Bitmap specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1f, false);
+        Bitmap normal, diffuse, roughness, specular;
+
+        float inverseGamma = 1;
+
+        if (globalGamma != 1) {
+            inverseGamma = (float)(globalGamma);
+        }
+
+        // TODO: Find best values for inverseGamma correction for LOW_CONTRAST_IMAGES
+        if (lowContrastImage){
+            if (globalMean >= 0.5){
+                specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), inverseGamma/2, false);
+                diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), inverseGamma/2, false);
+
+                specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1/inverseGamma, false);
+                diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1, false);
+            }
+            else{
+                specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), 1/inverseGamma, false);
+                diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1/inverseGamma, false);
+            }
+        }
+        else{
+            inverseGamma *= 1.2f;
+            diffuse = convertFloatArrayToBitmap(listOfBDRFChannels.get(1), 1/inverseGamma, false);
+            specular = convertFloatArrayToBitmap(listOfBDRFChannels.get(2), inverseGamma, false);
+        }
+        normal = convertFloatArrayToBitmap(listOfBDRFChannels.get(0), 1, false);
+        roughness = convertFloatArrayToBitmap(listOfBDRFChannels.get(3), inverseGamma, false); //1.2f
+
+
 
         normal = Bitmap.createScaledBitmap(normal, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
         diffuse = Bitmap.createScaledBitmap(diffuse, IMAGE_SIZE * 2, IMAGE_SIZE * 2, false);
@@ -299,11 +330,6 @@ public class MainActivity extends AppCompatActivity {
         bitmaps[1] = diffuse;
         bitmaps[2] = roughness;
         bitmaps[3] = specular;
-
-//        bitmaps[0] = gammaCorrectBitmap(normal, 0.9f);
-//        bitmaps[1] = gammaCorrectBitmap(diffuse, 0.9f);
-//        bitmaps[2] = gammaCorrectBitmap(roughness, 0.9f);
-//        bitmaps[3] = gammaCorrectBitmap(specular, 0.9f);
 
         return bitmaps;
     }
@@ -354,7 +380,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (gamma != 1){
-            convertedMat = gammaCorrection(convertedMat, gamma);
+            convertedMat = basicGammaCorrection(convertedMat, gamma);
         }
 
         Bitmap bitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
@@ -435,7 +461,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Good
-    public static Mat gammaCorrection(Mat src, float gamma) {
+    public static Mat basicGammaCorrection(Mat src, float gamma) {
         float invGamma = 1 / gamma;
 
         Mat table = new Mat(1, 256, CvType.CV_8U);
@@ -448,6 +474,123 @@ public class MainActivity extends AppCompatActivity {
         Core.LUT(src, table, gammaCorrected);
 
         return gammaCorrected;
+    }
+
+    // Good
+    public static double heavySide(double x){
+        if (x <= 0){
+            return 0;
+        }
+
+        return 1;
+    }
+
+    // Good
+    public static double getK(int PixelIntensity, float gamma){
+        double I = Math.pow(PixelIntensity / 255.0f, gamma);
+
+        return I + (1 - I) * (Math.pow(globalMean, gamma));
+    }
+
+    // Good
+    public static double getGammaC(int PixelIntensity, float gamma){
+        double k = getK(PixelIntensity, gamma);
+
+        return 1 / (1 + heavySide(0.5 - globalMean) * (k - 1));
+    }
+
+    // Good
+    public static int getLowContrastGammaCorrectedValue(int intensity, double gamma){
+        double correctedIntensity = Math.pow(intensity / 255.0f, gamma);
+
+        if (globalMean < 0.5){
+            double K = getK(intensity, (float) gamma);
+            double newIntensity = correctedIntensity / K;
+
+            return (int)(newIntensity * 255);
+        }
+
+        Log.e(TAG, "Dealing with a bright images");
+        return (int) (correctedIntensity * 255);
+    }
+
+    // Good
+    public static Mat gammaCorrection(Mat src, float gamma) {
+        float invGamma = 1 / gamma;
+
+        Mat table = new Mat(1, 256, CvType.CV_8U);
+        Mat gammaCorrected = new Mat();
+
+        for (int i = 0; i < 256; ++i) {
+            if (lowContrastImage){
+                int newIntensity = getLowContrastGammaCorrectedValue(i, invGamma);
+
+                table.put(0, i, newIntensity);
+            }
+            else {
+                double c = getGammaC(i, invGamma);
+
+                table.put(0, i, (int) (Math.pow(i / 255.0f, invGamma) * 255 * c));
+            }
+        }
+
+        Core.LUT(src, table, gammaCorrected);
+
+        return gammaCorrected;
+    }
+
+    // Good
+    public static double[] getMeanAndStandartDeviation(Bitmap bitmap){
+        Mat image = new Mat();
+        Utils.bitmapToMat(bitmap, image);
+        Mat grayImage = new Mat();
+        Imgproc.cvtColor(image, grayImage, Imgproc.COLOR_BGR2GRAY);
+
+        MatOfDouble mean = new MatOfDouble();
+        MatOfDouble stdDev = new MatOfDouble();
+        Core.meanStdDev(grayImage, mean, stdDev);
+
+        double standardDeviation = stdDev.toArray()[0] / 255;
+        double meanValue = mean.toArray()[0] / 255;
+
+        return new double[]{standardDeviation, meanValue};
+    }
+
+    // Testing
+    public static Bitmap adaptiveGammaCorrection(Bitmap bitmap){
+        float t = 2.2f;
+
+        double[] imageInfo = getMeanAndStandartDeviation(bitmap);
+        double standardDeviation = imageInfo[0];
+        double meanValue = imageInfo[1];
+
+        globalStandartDeviation = standardDeviation;
+        globalMean = meanValue;
+
+        Log.e(TAG, "Standart deviation: " + standardDeviation);
+        Log.e(TAG, "Mean: " + meanValue);
+
+        boolean lowContrast = 4 * standardDeviation <= (float)1/t;
+
+        if (lowContrast){
+            double gamma = -Math.log(standardDeviation) / Math.log(2.0);
+            globalGamma = gamma;
+            lowContrastImage = true;
+
+            Log.e(TAG, "Low-contrast class");
+            Log.e(TAG, "" + gamma);
+
+            return gammaCorrectBitmap(bitmap, (float)(1/gamma));
+        }
+
+        double gamma = Math.exp((1 - (meanValue + standardDeviation)) / 2.0);
+        globalGamma = gamma;
+        lowContrastImage = false;
+
+        Log.e(TAG, "High-contrast class");
+        Log.e(TAG, "" + gamma);
+
+        return gammaCorrectBitmap(bitmap, (float)(1/gamma));
     }
 
     // Good
