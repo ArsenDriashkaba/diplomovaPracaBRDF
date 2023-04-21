@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         // Default image processing
-        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img49); // <--------------- Here
+        bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.nike); // <--------------- Here
         placeholder = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder);
 
         handleLoadTfLite();
@@ -634,10 +634,10 @@ public class MainActivity extends AppCompatActivity {
     // Testing...
     public void saveBitmapToImage(Bitmap bitmap, String filename){
         OutputStream fos;
+        Context context = this.getBaseContext();
 
-        try (FileOutputStream out = new FileOutputStream(filename)) {
-//            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); // bmp is your Bitmap instance
-//            // PNG is a lossless format, the compression factor (100) is ignored
+        try (FileOutputStream out = new FileOutputStream(context.getFilesDir() + filename)) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); // bmp is your Bitmap instance
 
             ContentResolver resolver = getContentResolver();
             ContentValues contentValues = new ContentValues();
